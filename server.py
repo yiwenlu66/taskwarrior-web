@@ -237,7 +237,7 @@ class Taskwarrior:
                 # never descriptions/dates/UDAs from an ANSI report table.
                 result = []
             if not result and int(self.version.split(".")[0]) >= 3:
-                return {"tasks": [], "report": report, "context": active}
+                return {"tasks": [], "report": report, "context": active, "dependencyIds": {}}
             if not result or any(not isinstance(t.get("id"), int) and t.get("status") in {"pending", "waiting", "recurring"} for t in result):
                 rows = self.project_ids(name, overrides)
                 if not result:
@@ -251,7 +251,24 @@ class Taskwarrior:
             for task in result:
                 if not isinstance(task.get("id"), int) or task["id"] <= 0:
                     task.pop("id", None)
-            return {"tasks": result, "report": report, "context": active}
+            return {"tasks": result, "report": report, "context": active,
+                    "dependencyIds": self.dependency_ids(result)}
+
+    def dependency_ids(self, tasks: list[dict]) -> dict[str, int]:
+        """Resolve referenced dependencies to working-set IDs across the whole database.
+
+        A blocker outside the current view (other project, waiting, held by a
+        filter) still has an ID, so it is looked up beyond the exported rows. A
+        completed or deleted blocker has no ID at all; it is omitted, which is how
+        the native report renders the Deps column. UUID fragments are never shown.
+        """
+        referenced = {task_uuid.lower() for task in tasks for task_uuid in (task.get("depends") or [])}
+        known = {task["uuid"].lower(): task.get("id") for task in tasks}
+        missing = sorted(referenced - known.keys())
+        if missing:
+            known.update({task["uuid"].lower(): task.get("id") for task in self.export(missing)})
+        return {task_uuid: known[task_uuid] for task_uuid in sorted(referenced)
+                if isinstance(known.get(task_uuid), int) and known[task_uuid] > 0}
 
     def project_ids(self, name: str, overrides: list[str]) -> list[tuple[str, int]]:
         # A private report name avoids user aliases colliding with report commands.

@@ -28,7 +28,15 @@ export function displayValue(value: unknown): string {
   return String(value);
 }
 const dateFields = new Set(['entry', 'modified', 'start', 'end', 'due', 'wait', 'scheduled', 'until']);
-export function columnValue(task: Task, column: string, tasks: Task[] = []): string {
+/** Working-set IDs of the blockers that still exist as open tasks, ascending. */
+export function blockedBy(task: Task, dependencyIds: Record<string, number>): number[] {
+  const value = task.depends;
+  if (!Array.isArray(value)) return [];
+  return value.map(uuid => dependencyIds[String(uuid).toLowerCase()])
+    .filter((id): id is number => typeof id === 'number' && id > 0)
+    .sort((left, right) => left - right);
+}
+export function columnValue(task: Task, column: string, dependencyIds: Record<string, number> = {}): string {
   const [attribute, modifier] = column.split('.');
   const value = task[attribute];
   if (attribute === 'id') return typeof value === 'number' && value > 0 ? String(value) : task.uuid.slice(0, 8);
@@ -57,11 +65,17 @@ export function columnValue(task: Task, column: string, tasks: Task[] = []): str
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', ...(date.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) });
   }
   if (attribute === 'annotations' && Array.isArray(value)) return value.map(annotation => (annotation as { description: string }).description).join(' · ');
-  if (attribute === 'depends' && Array.isArray(value)) return value.map(uuid => {
-    const dependency = tasks.find(candidate => candidate.uuid === uuid);
-    return dependency?.id && dependency.id > 0 ? String(dependency.id) : String(uuid).slice(0, 8);
-  }).join(', ');
+  // Only resolvable blockers get IDs. A completed dependency has no working-set ID
+  // and is omitted, as the native Deps column omits it; a UUID fragment is never shown.
+  if (attribute === 'depends' && Array.isArray(value)) {
+    const blockers = blockedBy(task, dependencyIds);
+    return blockers.length ? blockers.join(', ') : '—';
+  }
   return displayValue(value);
+}
+/** Started and still open. Taskwarrior keeps `start` on some completed tasks. */
+export function inProgress(task: Task): boolean {
+  return task.status === 'pending' && !!task.start;
 }
 export function isOverdue(task: Task): boolean {
   const due = parseDate(task.due);

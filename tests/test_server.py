@@ -228,6 +228,22 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(rows[0]["uuid"], second["uuid"])
             self.assertTrue(all(t["id"] > 0 for t in rows))
 
+    def test_dependency_ids_resolve_outside_the_view_and_drop_completed_blockers(self):
+        blocker = self.add("hidden blocker", project="gamma")
+        finished = self.add("finished blocker", project="alpha")
+        stalled = self.add("stalled task", project="alpha", depends=finished["uuid"])
+        blocked = self.add("blocked task", project="alpha", depends=blocker["uuid"])
+        self.command("done", [finished["uuid"]])
+        result = self.tasks("external")
+        rows = {t["uuid"]: t for t in result["tasks"]}
+        # A blocker outside the report still resolves, so no UUID fragment is needed.
+        self.assertEqual(rows[blocked["uuid"]]["depends"], [blocker["uuid"]])
+        self.assertEqual(result["dependencyIds"], {blocker["uuid"]: blocker["id"]})
+        # The completed blocker keeps its reference but has no working-set ID.
+        self.assertEqual(rows[stalled["uuid"]]["depends"], [finished["uuid"]])
+        self.assertNotIn(finished["uuid"], result["dependencyIds"])
+        self.assertEqual(self.tasks("external", "description:none")["dependencyIds"], {})
+
     def test_uuid_selected_mutation_with_numbers_and_other_selectors(self):
         first = self.add("first")
         chosen = self.add("chosen")

@@ -3,7 +3,7 @@ import { ArrowDown, Check, ChevronDown, CircleHelp, Command, ExternalLink, Filte
 import { api } from './api';
 import { CommandBar, type InputMode } from './CommandBar';
 import { Modal } from './Modal';
-import { columnValue, displayValue, isOverdue, parseDate, safeLink } from './format';
+import { blockedBy, columnValue, displayValue, inProgress, isOverdue, parseDate, safeLink } from './format';
 import { tokenize } from './completion';
 import type { CommandResponse, Meta, Task, TaskResponse } from './types';
 
@@ -69,13 +69,17 @@ export default function App() {
   const query = JSON.stringify([report, filter]);
   currentQuery.current = query;
   const tasks = snapshot?.key === query ? snapshot.data.tasks : [];
+  const dependencyIds = snapshot?.key === query ? snapshot.data.dependencyIds ?? {} : {};
   const task = tasks.find(task => task.uuid === selected);
   const visibleMarks = tasks.filter(task => marks.has(task.uuid)).map(task => task.uuid);
   const targets = visibleMarks.length ? visibleMarks : task ? [task.uuid] : [];
   const currentReport = snapshot?.key === query ? snapshot.data.report : meta?.reports.find(item => item.name === report);
   const configuredColumns = currentReport?.columns?.length ? currentReport.columns : ['id', 'project', 'priority', 'due', 'description', 'urgency'];
   const columns = configuredColumns.filter(column => meta?.printEmptyColumns || !tasks.length || tasks.some(item => {
-    const value = item[column.split('.')[0]];
+    const attribute = column.split('.')[0];
+    // Only the ID-listing form can render empty; indicators and counts keep raw presence.
+    if (column === 'depends') return blockedBy(item, dependencyIds).length > 0;
+    const value = item[attribute];
     return value !== undefined && value !== null && value !== '' && (!Array.isArray(value) || value.length > 0);
   }));
 
@@ -289,10 +293,10 @@ export default function App() {
       <div className="task-region" ref={table} tabIndex={0} role="region" aria-label="Task list. Use j and k to navigate, Enter for details." aria-busy={loading}>
         <table className="task-table" aria-label={`${report || 'Task'} report`}>
           <thead><tr><th className="mark-cell"><span className="sr-only">Mark</span></th>{columns.map((column, index) => <th key={`${column}-${index}`} className={`column-${column.split('.')[0]}`} scope="col">{currentReport?.labels[configuredColumns.indexOf(column)] || column.split('.')[0]}{currentReport?.sort?.split(',').some(sort => sort.replace(/[+-]/g, '') === column.split('.')[0]) && <ArrowDown size={10} className="sort-indicator" />}</th>)}</tr></thead>
-          <tbody>{tasks.map(item => <tr id={`task-${item.uuid}`} key={item.uuid} tabIndex={-1} aria-selected={selected === item.uuid} className={`${selected === item.uuid ? 'selected' : ''} ${marks.has(item.uuid) ? 'marked' : ''} ${item.start ? 'started' : ''}`} onClick={() => { setSelected(item.uuid); focusTable(); }} onDoubleClick={() => { setSelected(item.uuid); setDetail(true); }}>
+          <tbody>{tasks.map(item => <tr id={`task-${item.uuid}`} key={item.uuid} tabIndex={-1} aria-selected={selected === item.uuid} className={`${selected === item.uuid ? 'selected' : ''} ${marks.has(item.uuid) ? 'marked' : ''} ${inProgress(item) ? 'started' : ''}`} onClick={() => { setSelected(item.uuid); focusTable(); }} onDoubleClick={() => { setSelected(item.uuid); setDetail(true); }}>
             <td className="mark-cell"><button type="button" className={`mark-button ${marks.has(item.uuid) ? 'checked' : ''}`} aria-label={`Mark task ${item.id ?? item.uuid.slice(0, 8)}`} aria-pressed={marks.has(item.uuid)} onClick={event => { event.stopPropagation(); toggleMark(item.uuid); focusTable(); }}><Check size={11} /></button></td>
             {columns.map((column, index) => {
-              const attribute = column.split('.')[0], value = columnValue(item, column, tasks), link = safeLink(item[attribute]);
+              const attribute = column.split('.')[0], value = columnValue(item, column, dependencyIds), link = safeLink(item[attribute]);
               return <td key={`${column}-${index}`} className={`column-${attribute} ${attribute === 'due' && isOverdue(item) ? 'overdue' : ''} ${attribute === 'priority' && item.priority ? `priority-${item.priority}` : ''}`} title={attribute === 'description' ? item.description : displayValue(item[attribute])}>
                 {link ? <a href={link} target="_blank" rel="noreferrer" onClick={event => event.stopPropagation()}>{value}<ExternalLink size={10} /></a> : value}
               </td>;

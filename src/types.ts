@@ -37,6 +37,7 @@ export interface TaskResponse {
   report: Report;
   revision: string;
   context: string;
+  dependencyIds?: Record<string, number>;
 }
 export interface CommandResponse {
   output: string;

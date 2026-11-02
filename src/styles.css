@@ -7,6 +7,7 @@
   --danger: #d92d20; --text-error: #b42318; --surface-error: #fef3f2;
   --border-error: #fecdca; --session-active: #ececec; --surface-code: #f7f7f7;
   --text-placeholder: #acacac; --shadow-pop: 0 4px 16px rgb(0 0 0 / .08);
+  --surface-started: #eef4fd;
   color: var(--text); background: var(--bg); font-size: 13px;
   font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased;
 }
@@ -17,6 +18,7 @@
   --danger: #e5684e; --text-error: #f0a496; --surface-error: #3a2420;
   --border-error: #6b3a32; --session-active: #2f2f2f; --surface-code: #161616;
   --text-placeholder: #6e6e6e; --shadow-pop: 0 8px 28px rgb(0 0 0 / .45);
+  --surface-started: #1f2833;
 }
 * { box-sizing: border-box; }
 body { margin: 0; }
@@ -81,6 +83,9 @@ kbd { font-family: var(--font-mono); font-size: 10px; font-weight: 400; line-hei
 .task-table td { height: 32px; border-bottom: 1px solid color-mix(in srgb, var(--hairline) 45%, transparent); max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .task-table tbody tr { cursor: default; }
 .task-table tbody tr:nth-child(even) { background: color-mix(in srgb, var(--panel) 65%, transparent); }
+/* Started (in progress) tasks carry a slightly cooler row tint; marks and
+   selection stay dominant, in that order. */
+.task-table tbody tr.started { background: var(--surface-started); }
 .task-table tbody tr:hover { background: var(--wash); }
 .task-table tbody tr.selected { background: var(--session-active); }
 .task-table tbody tr.marked:not(.selected) { background: var(--wash); }

@@ -114,6 +114,8 @@ Choose a configured report, select a task, and use the command prompt to act on 
 
 `modify`, `annotate`, `done`, `delete` and start/stop target the selection by UUID, so changing numeric Taskwarrior IDs does not redirect the action. Done, delete and start/stop ask for confirmation; undo runs directly, following VIT's `u` action. Taskwarrior interprets date expressions; Tab completion suggests commands, attributes, dates, reports, projects and tags rather than replacing its parser.
 
+Columns come from your Taskwarrior reports, and columns that are empty across the whole view are hidden. A `depends` column lists the IDs of the blockers that still exist as open tasks, in any project, ascending — the same IDs the native report shows; blockers that are already completed have no ID and are omitted rather than shown as UUID fragments. Rows for started (in progress) tasks carry a slightly cooler background tint.
+
 ### Keyboard reference
 
 Shortcuts apply when the task list is focused; text fields retain normal typing. Press **F1** for the in-app reference.

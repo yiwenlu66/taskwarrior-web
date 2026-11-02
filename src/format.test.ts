@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { columnValue, formatDuration, relativeDate, safeLink } from './format';
+import { blockedBy, columnValue, formatDuration, inProgress, relativeDate, safeLink } from './format';
 import type { Task } from './types';
 const task: Task = { uuid: 'aaaaaaaa-1111', id: 4, description: 'Fixture', status: 'pending' };
 afterEach(() => vi.useRealTimers());
@@ -19,11 +19,19 @@ describe('VIT column formatting', () => {
     expect(columnValue({ ...task, scheduled: '20261103T020000Z' }, 'scheduled.countdown')).toBe('3h');
     expect(columnValue({ ...task, until: '20261102T200000Z' }, 'until.remaining')).toBe('');
   });
-  it('maps dependencies to ephemeral IDs and falls back to short UUIDs', () => {
-    const dependency = { ...task, id: 12 };
-    expect(columnValue({ ...task, depends: [task.uuid, 'missing-uuid-2222'] }, 'depends', [dependency])).toBe('12, missing-');
+  it('lists only resolvable dependency IDs and never UUID fragments', () => {
+    const ids = { [task.uuid]: 12, 'completed-uuid': 0, 'low-uuid': 3 };
+    expect(columnValue({ ...task, depends: [task.uuid, 'low-uuid', 'completed-uuid'] }, 'depends', ids)).toBe('3, 12');
+    expect(columnValue({ ...task, depends: ['completed-uuid', 'vanished-uuid'] }, 'depends', ids)).toBe('—');
+    expect(blockedBy({ ...task, depends: [task.uuid, 'vanished-uuid'] }, ids)).toEqual([12]);
+    expect(blockedBy(task, ids)).toEqual([]);
     expect(columnValue({ ...task, id: undefined }, 'id')).toBe('aaaaaaaa');
     expect(columnValue({ ...task, id: 0 }, 'id')).toBe('aaaaaaaa');
+  });
+  it('treats only started, still-open tasks as in progress', () => {
+    expect(inProgress({ ...task, start: '20261102T120000Z' })).toBe(true);
+    expect(inProgress(task)).toBe(false);
+    expect(inProgress({ ...task, status: 'completed', start: '20261102T120000Z' })).toBe(false);
   });
   it('supports common report modifiers and safe external URLs', () => {
     expect(columnValue({ ...task, tags: ['a', 'b'] }, 'tags.count')).toBe('2');
