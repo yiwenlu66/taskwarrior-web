@@ -162,6 +162,35 @@ try {
     await cmd(b).fill('m +extern'); await b.getByRole('listbox', {name:'Command suggestions'}).getByRole('option').filter({hasText:'externaltag'}).first().waitFor({timeout:5000});
     await a.getByLabel('Close command entry').click(); await b.getByLabel('Close command entry').click();
   });
+  await check('draft keeps its original UUID when external completion moves focus', async () => {
+    await a.reload(); await a.waitForSelector('tbody tr'); await focus(a);
+    const ids = await rows(a).evaluateAll(rs => rs.slice(3,5).map(r => r.id.slice(5)));
+    const [original, neighbor] = ids;
+    await a.locator('#task-' + original).click();
+    const before = JSON.parse(task(neighbor, 'export'))[0];
+    await a.keyboard.press('m'); await cmd(a).fill('m priority:H');
+    task(original, 'done');
+    await a.waitForFunction(id => !document.querySelector('#task-' + id), original, {timeout:10000});
+    assert.equal(await selectedId(a), 'task-' + neighbor, 'focus moves to neighboring task');
+    assert.equal(await cmd(a).inputValue(), 'm priority:H', 'draft survives external completion');
+    const result = Promise.any([
+      a.waitForResponse(r => r.url().endsWith('/api/command') && r.request().method() === 'POST', {timeout:6000}).then(async r => ({kind:'response', status:r.status(), body:await r.json(), uuids: r.request().postDataJSON().uuids})),
+      a.getByRole('alert').waitFor({timeout:6000}).then(() => ({kind:'alert'})),
+    ]);
+    await cmd(a).press('Enter');
+    const outcome = await result;
+    if (outcome.kind === 'response') {
+      assert(!outcome.uuids.includes(neighbor), `command targeted neighbor ${neighbor}`);
+      if (outcome.status < 400) {
+        assert(outcome.uuids.includes(original), 'successful command must target original UUID');
+        assert.equal(JSON.parse(task(original, 'export'))[0].priority, 'H');
+      }
+    }
+    const after = JSON.parse(task(neighbor, 'export'))[0];
+    assert.equal(after.priority, before.priority, 'neighbor priority must not change');
+    assert.equal(after.description, before.description, 'neighbor description must not change');
+    assert.equal(after.status, before.status, 'neighbor status must not change');
+  });
   await check('mixed marked start/stop toggles each UUID independently', async () => {
     await a.reload(); await a.waitForSelector('tbody tr');
     const ids = await rows(a).evaluateAll(rs => rs.slice(3,5).map(r=>r.id.slice(5)));
