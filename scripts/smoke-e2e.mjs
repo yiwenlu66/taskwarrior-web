@@ -32,7 +32,7 @@ async function check(name, fn) {
   try { await fn(); passes.push(name); console.log('PASS', name); }
   catch (e) { failures.push(`${name}: ${e.message}`); console.error('FAIL', name, e.message); }
 }
-let server, browser;
+let server, browser, browser2;
 try {
   for (let i = 0; i < 36; i++) task('add', `Fixture task ${String(i).padStart(2, '0')}`, `tiebreak:${35-i}`, `project:${i%2 ? 'alpha' : 'beta'}`, '+fixture');
   task('add', 'Fixture completed', 'project:archive'); task('description:Fixture completed', 'done');
@@ -49,8 +49,10 @@ try {
     await wait(100);
   }
   browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_PATH || '/opt/google/chrome/chrome', args: ['--no-sandbox'] });
+  browser2 = await chromium.launch({ headless: true, executablePath: process.env.CHROME_PATH || '/opt/google/chrome/chrome', args: ['--no-sandbox'] });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
-  const a = await context.newPage(), b = await context.newPage();
+  const context2 = await browser2.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
+  const a = await context.newPage(), b = await context2.newPage();
   a.setDefaultTimeout(6000); b.setDefaultTimeout(6000);
   const url = 'http://127.0.0.1:7835';
   await Promise.all([a.goto(url), b.goto(url)]);
@@ -197,7 +199,7 @@ try {
     await a.unroute('**/api/tasks?*');
   });
 } finally {
-  await browser?.close();
+  await browser?.close(); await browser2?.close();
   if (server && server.exitCode === null) { server.kill('SIGTERM'); await new Promise(r => server.once('exit',r)); }
   rmSync(fixture,{recursive:true,force:true});
 }
