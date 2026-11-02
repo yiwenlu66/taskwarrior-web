@@ -16,6 +16,13 @@ Environment=PATH=/usr/local/bin:/usr/bin:/bin
 # Optional: uncomment and edit to use a non-default Taskwarrior instance.
 # Environment=TASKRC=%h/.taskrc
 # Environment=TASKDATA=%h/.task
+# Optional: trust an exact hostname besides the bound address and loopback, so
+# the app can be opened through a name that resolves to the same socket (for
+# example this machine's tailnet DNS name). scripts/install-service.sh derives
+# and registers this node's own tailnet name automatically; a wildcard or a bare
+# suffix is never accepted here.
+# Environment=TASKWEB_ALLOWED_HOSTS=this-host.example.ts.net,this-host
+# ...or pass --allowed-host once per name on the ExecStart line below.
 ExecStart=/usr/bin/python3 server.py --host ${TASKWEB_HOST} --port ${TASKWEB_PORT} --static-dir dist
 Restart=on-failure
 RestartSec=5

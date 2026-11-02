@@ -29,6 +29,15 @@ python3 server.py --host "$(tailscale ip -4)" --port 7834 --static-dir dist
 
 Open `http://<your-tailscale-ip>:7834` from a device permitted to reach the server by your tailnet policy. Find the address with `tailscale ip -4`. The backend also accepts `TASKWEB_HOST` and `TASKWEB_PORT`; explicit command-line options take precedence.
 
+Opening the app through a name instead of the address works too, as long as that name is registered as an exact trusted host, for example this machine's tailnet DNS name:
+
+```sh
+python3 server.py --host "$(tailscale ip -4)" --port 7834 --static-dir dist \
+  --allowed-host "$(tailscale status --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')"
+```
+
+`--allowed-host` is repeatable and `TASKWEB_ALLOWED_HOSTS` accepts a comma-separated list. Only exact names are trusted, so a registered name never grants a whole domain.
+
 ### Persistent user service
 
 After building, install and start the service:
@@ -40,6 +49,12 @@ After building, install and start the service:
 ```
 
 The installer resolves this checkout's absolute path, validates the bind against the local `tailscale ip -4`, and writes `~/.config/systemd/user/taskwarrior-web.service` (or `$XDG_CONFIG_HOME/systemd/user/`). It enables the unit under `default.target` and restarts it to apply changes. It captures your current `PATH` so the service can find `task`. Keep the checkout at that location; rerun the installer after moving it or changing environment paths.
+
+It also registers this machine's own tailnet DNS name (both the fully qualified name and the short hostname) as trusted request hosts, so both `http://<your-tailscale-ip>:7834` and `http://<your-tailnet-name>:7834` can submit changes. Names are registered only when `tailscale status --json` reports a self-consistent node name; nothing is guessed. To trust additional exact names, export a comma-separated list before installing:
+
+```sh
+TASKWEB_ALLOWED_HOSTS=dev-box.example.ts.net ./scripts/install-service.sh
+```
 
 For a custom Taskwarrior instance, export the same variables you use in your terminal **before installing**:
 
@@ -81,6 +96,8 @@ systemctl --user daemon-reload
 There is **no application authentication**. Anyone who can reach this service can read and modify the selected user's tasks. Bind production only to the server's Tailscale IPv4, and limit access through Tailscale grants/ACLs. The installer refuses wildcard, LAN and public binds, including `0.0.0.0` and `::`.
 
 Do not expose this port through public forwarding, Tailscale Funnel or a public reverse proxy. Same-origin mutation checks are an additional browser boundary, not a substitute for access control. HTTP is carried inside Tailscale's encrypted connection between tailnet devices.
+
+Browser mutations are accepted only for trusted request hosts: the bound address, loopback, and any exact name registered with `--allowed-host` or `TASKWEB_ALLOWED_HOSTS`. Reads are unaffected, but a page opened through an unregistered name cannot submit changes. Register names you actually use, and remember that a name is trusted for the port it was configured on.
 
 ## Using the app
 

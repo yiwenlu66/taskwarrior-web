@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterable
 import hashlib
+import ipaddress
 import json
 import mimetypes
 import os
@@ -31,6 +33,44 @@ ROW = re.compile(r"^\s*([0-9a-fA-F-]{36})\s+(\d+|-)\s*$")
 # Report names must not collide with CLI commands or internal helpers.
 RESERVED = set("add annotate append prepend config context delete denotate done duplicate edit execute export help import information log modify projects purge reports shell show start stop summary sync tags undo version diagnostics calendar colors commands count ids uuids _show _get".split())
 ALIASES = {"a": "add", "m": "modify", "d": "done", "D": "delete", "A": "annotate", "u": "undo", "r": "report", "f": "filter", "s": "toggle", "b": "toggle", "E": "denotate", "S": "sync"}
+# A hostname label, and the wildcard addresses that must never be trusted aliases.
+HOST_LABEL = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
+ANY_ADDRESS = {"0.0.0.0", "::", "*"}
+
+
+def normalize_host(value: str) -> str:
+    """Case-fold a request hostname and drop one trailing root dot."""
+    host = value.strip().lower()
+    if host.startswith("[") and host.endswith("]"):
+        host = host[1:-1]
+    return host[:-1] if host.endswith(".") else host
+
+
+def parse_allowed_hosts(values: Iterable[str]) -> frozenset[str]:
+    """Validate explicitly trusted request hostnames.
+
+    Aliases are exact names. Wildcards, address suffixes and blank entries are
+    refused so that a single registered name cannot widen trust to a whole
+    domain, and the bound address plus loopback stay trusted by default.
+    """
+    hosts: set[str] = set()
+    if isinstance(values, str):
+        values = [values]
+    for raw in values:
+        for item in str(raw).split(","):
+            if not item.strip():
+                continue
+            host = normalize_host(item)
+            if not host or any(ch in host for ch in "*/\\ \t") or host in ANY_ADDRESS:
+                raise ValueError(f"Invalid trusted host alias: {item.strip()!r}")
+            try:
+                ipaddress.ip_address(host)
+            except ValueError:
+                labels = host.split(".")
+                if len(host) > 253 or not all(HOST_LABEL.fullmatch(label) for label in labels):
+                    raise ValueError(f"Invalid trusted host alias: {item.strip()!r}") from None
+            hosts.add(host)
+    return frozenset(hosts)
 
 
 def uuid_filter(uuids: list[str]) -> list[str]:
@@ -482,15 +522,23 @@ class RevisionMonitor:
 class TaskHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, address: tuple[str, int], task: Taskwarrior, static_dir: Path):
+    def __init__(self, address: tuple[str, int], task: Taskwarrior, static_dir: Path,
+                 allowed_hosts: Iterable[str] | None = None):
         self.task = task
         self.static_dir = static_dir.resolve()
         self.monitor = RevisionMonitor(task)
+        self.allowed_hosts = parse_allowed_hosts(allowed_hosts or ())
         try:
             super().__init__(address, Handler)
         except Exception:
             self.monitor.close()
             raise
+        # The bound address and loopback are trusted without configuration; the
+        # aliases exist so an operator can also open the app through a name that
+        # resolves to the same socket (for example this machine's tailnet name).
+        self.trusted_hosts = frozenset(
+            {normalize_host(str(self.server_address[0])), "localhost", "127.0.0.1", "::1"}
+            | set(self.allowed_hosts))
 
     def server_close(self) -> None:
         self.monitor.close()
@@ -602,14 +650,15 @@ class Handler(BaseHTTPRequestHandler):
             if not host or target.username or target.password or target.path or target.query or target.fragment or not target.hostname:
                 raise ValueError
             target_port = target.port or 80
-            allowed = {str(self.server.server_address[0]).lower(), "localhost", "127.0.0.1", "::1"}
-            if target.hostname.lower() not in allowed or target_port != self.server.server_port:
+            target_host = normalize_host(target.hostname)
+            # Exact hostname match only: an alias never widens trust to a suffix.
+            if target_host not in self.server.trusted_hosts or target_port != self.server.server_port:
                 raise ValueError
             if origin is not None:
                 source = urlsplit(origin)
                 if source.scheme not in {"http", "https"} or source.username or source.password or source.path not in {"", "/"} or source.query or source.fragment:
                     raise ValueError
-                if source.scheme != "http" or source.hostname != target.hostname or (source.port or 80) != target_port:
+                if source.scheme != "http" or normalize_host(source.hostname or "") != target_host or (source.port or 80) != target_port:
                     raise ValueError
             if self.headers.get("Sec-Fetch-Site") == "cross-site":
                 raise ValueError
@@ -676,12 +725,20 @@ def main() -> None:
     parser.add_argument("--host", default=os.environ.get("TASKWEB_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=os.environ.get("TASKWEB_PORT", "7834"))
     parser.add_argument("--static-dir", type=Path, default=Path(__file__).resolve().parent / "dist")
+    parser.add_argument("--allowed-host", action="append", metavar="HOST",
+                        help="Extra request hostname trusted for same-origin mutations, "
+                             "for example this machine's tailnet DNS name (repeatable).")
     args = parser.parse_args()
+    aliases = args.allowed_host
+    if aliases is None:
+        aliases = os.environ.get("TASKWEB_ALLOWED_HOSTS", "")
     try:
-        server = TaskHTTPServer((args.host, args.port), Taskwarrior(), args.static_dir)
-    except (APIError, OSError) as exc:
+        server = TaskHTTPServer((args.host, args.port), Taskwarrior(), args.static_dir, aliases)
+    except (APIError, OSError, ValueError) as exc:
         parser.exit(1, f"Cannot start Taskwarrior web: {exc}\n")
     print(f"Taskwarrior {server.task.version} web listening on http://{args.host}:{server.server_port}", flush=True)
+    if server.allowed_hosts:
+        print("Trusted request hostnames: " + ", ".join(sorted(server.allowed_hosts)), flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

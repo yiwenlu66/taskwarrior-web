@@ -3,9 +3,12 @@ import http.client
 import json
 import os
 from pathlib import Path
+import re
+import select
 import shutil
 import sqlite3
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -13,7 +16,7 @@ import unittest
 from unittest.mock import patch
 from urllib.parse import urlencode
 
-from server import APIError, TaskHTTPServer, Taskwarrior, sqlite_image_digest
+from server import APIError, TaskHTTPServer, Taskwarrior, parse_allowed_hosts, sqlite_image_digest
 
 
 @unittest.skipUnless(shutil.which("task"), "Taskwarrior CLI is required")
@@ -316,6 +319,93 @@ class ServerTests(unittest.TestCase):
         for path in ("/%2e%2e/outside.txt", "/../outside.txt", "/linked.txt", "/dir/", "/%2f../outside.txt", "/%00"):
             self.assertEqual(self.request("GET", path)[0], 403, path)
         self.assertEqual(self.tasks()["tasks"], [])
+
+    def test_allowed_host_alias_parsing_and_rejection(self):
+        self.assertEqual(parse_allowed_hosts(["Node.Example.Test.", "node.example.test"]),
+                         frozenset({"node.example.test"}))
+        # A comma list and the bare env value are both accepted input shapes.
+        self.assertEqual(parse_allowed_hosts("a.test,b.test"), frozenset({"a.test", "b.test"}))
+        self.assertEqual(parse_allowed_hosts(["shorty", " ", ""]), frozenset({"shorty"}))
+        self.assertEqual(parse_allowed_hosts([]), frozenset())
+        for bad in ("*.example.test", "node.*", "*", "0.0.0.0", "::", "bad_host", "host/path",
+                    "host\\path", "two words.test", "-lead.test", "trail-.test", "dot..test"):
+            with self.assertRaises(ValueError, msg=bad):
+                parse_allowed_hosts([bad])
+
+    def test_trusted_host_alias_reaches_command_handler_and_boundaries(self):
+        alias = "taskweb.example.test"
+        server = TaskHTTPServer(("127.0.0.1", 0), self.task, self.static, [alias, "shorty"])
+        thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True)
+        thread.start()
+        port = server.server_port
+
+        def post(host, origin=None):
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            headers = {"Content-Type": "application/json", "Host": host}
+            if origin is not None:
+                headers["Origin"] = origin
+            connection.request("POST", "/api/command",
+                               body=json.dumps({"command": ":f project:alpha"}).encode(), headers=headers)
+            response = connection.getresponse()
+            payload = json.loads(response.read())
+            connection.close()
+            return response.status, payload
+
+        fqdn = f"{alias}:{port}"
+        try:
+            # A registered alias with a matching Origin reaches the command handler
+            # and stays non-mutating: the filter branch never calls the CLI.
+            status, body = post(fqdn, f"http://{fqdn}")
+            self.assertEqual(status, 200, body)
+            self.assertEqual(body, {"output": "", "changed": False, "filter": "project:alpha"})
+            # Case and a trailing root dot still name the same trusted host.
+            self.assertEqual(post(f"{alias}.:{port}", f"http://{alias}.:{port}")[0], 200)
+            self.assertEqual(post(fqdn.upper(), f"http://{fqdn}".upper())[0], 200)
+            # The explicitly registered short hostname is trusted too.
+            self.assertEqual(post(f"shorty:{port}", f"http://shorty:{port}")[0], 200)
+            # An alias never widens trust: a suffix, an unrelated name, a mismatched
+            # Origin, or a different port are all refused.
+            self.assertEqual(post(f"evil.{alias}:{port}", f"http://evil.{alias}:{port}")[0], 403)
+            self.assertEqual(post(f"attacker.invalid:{port}", f"http://attacker.invalid:{port}")[0], 403)
+            self.assertEqual(post(fqdn, "http://attacker.invalid")[0], 403)
+            self.assertEqual(post(fqdn, f"http://{alias}:{port + 1}")[0], 403)
+            # Non-browser clients may omit Origin on a trusted host.
+            self.assertEqual(post(fqdn)[0], 200)
+            self.assertEqual(self.tasks()["tasks"], [])
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+    def test_allowed_host_cli_flag_is_trusted(self):
+        script = Path(__file__).resolve().parent.parent / "server.py"
+        process = subprocess.Popen(
+            [sys.executable, str(script), "--host", "127.0.0.1", "--port", "0",
+             "--static-dir", str(self.static), "--allowed-host", "alias.example.test"],
+            env=self.env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            # Bounded readiness wait: a live server must never block the suite.
+            ready, _, _ = select.select([process.stdout], [], [], 10)
+            self.assertTrue(ready, "server did not report readiness within 10s")
+            line = process.stdout.readline()
+            match = re.search(r"listening on http://127\.0\.0\.1:(\d+)", line)
+            self.assertIsNotNone(match, f"unexpected startup line: {line!r}")
+            port = int(match.group(1))
+            host = f"alias.example.test:{port}"
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            connection.request("POST", "/api/command", body=json.dumps({"command": ":f +PENDING"}).encode(),
+                               headers={"Content-Type": "application/json", "Host": host,
+                                        "Origin": f"http://{host}"})
+            response = connection.getresponse()
+            body = json.loads(response.read())
+            connection.close()
+            self.assertEqual(response.status, 200, body)
+            self.assertEqual(body["filter"], "+PENDING")
+        finally:
+            process.terminate()
+            process.wait(timeout=5)
+            process.stdout.close()
+            process.stderr.close()
 
     def test_report_filter_switch_commands_and_clear_errors(self):
         self.assertEqual(self.command(":external")["report"], "external")

@@ -10,6 +10,8 @@ Build first with npm ci && npm run build. The default address is the local
 `tailscale ip -4`; the default port is 7834. TASKWEB_HOST/TASKWEB_PORT may
 supply defaults. A host override must match this machine's Tailscale IPv4.
 Export TASKRC and/or TASKDATA before installing to preserve custom locations.
+TASKWEB_ALLOWED_HOSTS adds extra trusted request hostnames (comma separated) on
+top of this node's own tailnet name, which is registered automatically.
 Run as your regular user, without sudo. Installs and starts a systemd user unit.
 EOF
 }
@@ -45,6 +47,43 @@ port=$((10#$port))
 ((port >= 1 && port <= 65535)) || fail 'Port must be an integer from 1 to 65535.'
 systemctl --user show-environment >/dev/null || fail 'No systemd user manager is available; use a logged-in user session.'
 
+# Trust this node's own tailnet DNS name in addition to the bound address, so
+# same-origin mutations work when the app is opened through MagicDNS. Only the
+# name `tailscale status --json` reports for this node is registered; a wildcard,
+# a bare suffix or an any-host alias is never accepted.
+trusted_names=()
+if status_json=$(tailscale status --json 2>/dev/null) && [[ -n "$status_json" ]]; then
+  while IFS= read -r name; do
+    [[ -n "$name" ]] && trusted_names+=("$name")
+  done < <(python3 -c '
+import json, sys
+
+try:
+    status = json.load(sys.stdin)
+except ValueError:
+    raise SystemExit(0)
+node = status.get("Self") or {}
+name = (node.get("DNSName") or "").strip()
+suffix = (status.get("MagicDNSSuffix") or "").strip()
+hostname = (node.get("HostName") or "").strip()
+name = name[:-1] if name.endswith(".") else name
+suffix = suffix[:-1] if suffix.endswith(".") else suffix
+# Require a self-consistent node name before trusting it verbatim.
+if not name or not suffix or not hostname or name != hostname + "." + suffix:
+    raise SystemExit(0)
+print(name)
+if hostname != name:
+    print(hostname)
+' <<<"$status_json")
+fi
+if [[ -n "${TASKWEB_ALLOWED_HOSTS-}" ]]; then
+  IFS=',' read -r -a extra_hosts <<<"$TASKWEB_ALLOWED_HOSTS"
+  for name in "${extra_hosts[@]}"; do
+    name=${name//[[:space:]]/}
+    [[ -n "$name" ]] && trusted_names+=("$name")
+  done
+fi
+
 # systemd unit strings use their own quoting and %-specifier expansion.
 quote_unit() {
   local value=$1
@@ -60,7 +99,7 @@ quote_exec() {
 }
 
 unit_dir=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
-for value in "$project" "$python" "$PATH" "$unit_dir" "${TASKRC-}" "${TASKDATA-}"; do
+for value in "$project" "$python" "$PATH" "$unit_dir" "${TASKRC-}" "${TASKDATA-}" ${trusted_names[@]+"${trusted_names[@]}"}; do
   [[ "$value" != *$'\n'* && "$value" != *$'\r'* ]] || fail 'Newlines in paths/environment are unsupported.'
 done
 for name in TASKRC TASKDATA; do
@@ -84,8 +123,14 @@ trap '[[ ! -e "$tmp" ]] || rm -f -- "$tmp"' EXIT
       printf 'Environment=%s\n' "$(quote_unit "$name=$value")"
     fi
   done
-  printf 'ExecStart=%s %s --host %s --port %s --static-dir dist\n' \
+  printf 'ExecStart=%s %s --host %s --port %s --static-dir dist' \
     "$(quote_exec "$python")" "$(quote_exec "$project/server.py")" "$host" "$port"
+  if ((${#trusted_names[@]})); then
+    for name in "${trusted_names[@]}"; do
+      printf ' --allowed-host %s' "$(quote_exec "$name")"
+    done
+  fi
+  printf '\n'
   printf 'Restart=on-failure\nRestartSec=5\n\n[Install]\nWantedBy=default.target\n'
 } >"$tmp"
 chmod 600 "$tmp"
@@ -94,5 +139,10 @@ systemctl --user daemon-reload
 systemctl --user enable taskwarrior-web.service
 systemctl --user restart taskwarrior-web.service
 printf 'Installed %s\nOpen http://%s:%s from your tailnet.\n' "$unit" "$host" "$port"
+if ((${#trusted_names[@]})); then
+  printf 'Trusted request hostnames: %s\n' "${trusted_names[*]}"
+else
+  printf 'No tailnet DNS name registered; mutations require the address URL above.\n'
+fi
 printf 'Check: systemctl --user status taskwarrior-web.service\n'
 printf 'For startup without a login: loginctl enable-linger "$USER" (may require administrator approval).\n'
