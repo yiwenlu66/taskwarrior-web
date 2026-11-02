@@ -6,7 +6,7 @@ import { CommandBar } from './CommandBar';
 
 function Harness({ initial = 'm due:', submit = vi.fn() }: { initial?: string; submit?: (value: string) => void }) {
   const [draft, setDraft] = useState(initial);
-  return <><CommandBar open mode="command" draft={draft} onDraft={setDraft} onClose={vi.fn()} onSubmit={submit} meta={null} tasks={[]} busy={false} targetCount={1} /><button>Outside</button></>;
+  return <><CommandBar open mode="command" draft={draft} onDraft={setDraft} onClose={vi.fn()} onSubmit={submit} meta={null} tasks={[]} busy={false} targetUUIDs={['uuid-one']} /><button>Outside</button></>;
 }
 
 describe('command interaction', () => {

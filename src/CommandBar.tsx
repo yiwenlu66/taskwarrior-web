@@ -14,11 +14,11 @@ interface Props {
   meta: Meta | null;
   tasks: Task[];
   busy: boolean;
-  targetCount: number;
+  targetUUIDs: string[];
   intent?: string;
 }
 
-export function CommandBar({ open, mode, draft, onDraft, onClose, onSubmit, meta, tasks, busy, targetCount, intent }: Props) {
+export function CommandBar({ open, mode, draft, onDraft, onClose, onSubmit, meta, tasks, busy, targetUUIDs, intent }: Props) {
   const input = useRef<HTMLInputElement>(null);
   const [caret, setCaret] = useState(draft.length);
   const [dismissed, setDismissed] = useState(false);
@@ -68,7 +68,7 @@ export function CommandBar({ open, mode, draft, onDraft, onClose, onSubmit, meta
         </li>)}
       </ul>
     </div>}
-    <div className="command-meta"><span>{mode === 'command' ? `${targetCount} task${targetCount === 1 ? '' : 's'} targeted · UUID selection` : mode === 'reverse' ? 'Search backward · local visible tasks' : 'Search forward · local visible tasks'}</span><span>{mode === 'command' ? 'Taskwarrior syntax · no shell' : 'Enter to find · n / N repeat'}</span></div>
+    <div className="command-meta"><span>{mode === 'command' ? `${targetUUIDs.length} task${targetUUIDs.length === 1 ? '' : 's'} targeted${targetUUIDs.length ? ` · ${targetUUIDs.join(', ')}` : ''}` : mode === 'reverse' ? 'Search backward · local visible tasks' : 'Search forward · local visible tasks'}</span><span>{mode === 'command' ? 'Taskwarrior syntax · no shell' : 'Enter to find · n / N repeat'}</span></div>
     <form onSubmit={event => { event.preventDefault(); if (!busy && !composing.current) onSubmit(draft); }} className="command-form">
       <span className="command-prompt" aria-hidden="true">{mode === 'command' ? ':' : mode === 'reverse' ? '?' : '/'}</span>
       <input ref={input} aria-label={mode === 'command' ? 'Task command' : 'Search query'} role={mode === 'command' ? 'combobox' : undefined} aria-autocomplete={mode === 'command' ? 'list' : undefined} aria-expanded={mode === 'command' ? show : undefined} aria-controls={show ? 'command-completions' : undefined} aria-activedescendant={show && active >= 0 ? `completion-${active}` : undefined} autoComplete="off" autoCapitalize="off" spellCheck={false} value={draft} placeholder={mode === 'command' ? intent || 'add a task · modify due:tomorrow · report next' : 'Find in visible tasks…'}

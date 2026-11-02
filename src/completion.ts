@@ -29,7 +29,7 @@ const commands: [string, string][] = [
   ['add', 'Create a task'], ['modify', 'Modify selected tasks'], ['done', 'Complete selected tasks'],
   ['delete', 'Delete selected tasks · confirmation required'], ['start', 'Start selected tasks'],
   ['stop', 'Stop selected tasks'], ['toggle', 'Toggle start / stop per selected task'], ['annotate', 'Add an annotation'], ['denotate', 'Remove matching annotation'],
-  ['undo', 'Undo the last change'], ['help', 'Keyboard reference'], ['report', 'Switch report'],
+  ['undo', 'Undo the last change'], ['sync', 'Sync with the configured Taskwarrior server'], ['help', 'Keyboard reference'], ['report', 'Switch report'],
   ['filter', 'Set an additional Taskwarrior filter'], ['context', 'Switch active context'],
 ];
 const dateFields = new Set(['due', 'wait', 'scheduled', 'until', 'entry', 'end', 'start']);

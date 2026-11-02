@@ -110,7 +110,7 @@ Shortcuts apply when the task list is focused; text fields retain normal typing.
 | `Enter` / `=` | Task details |
 | `a`, `m`, `A`, `E` | Add, modify, annotate, denotate |
 | `d`, `D`, `b` | Done, delete, start/stop (confirm) |
-| `u` | Undo the most recent change directly |
+| `u`, `S` | Undo the most recent change; sync with the configured Taskwarrior server |
 | `P`, `p`, `T`, `w` | Priority, project, tags, wait |
 | `:`, `f`, `c` | Command prompt, filter, context |
 | `/` / `?`, `n` / `N` | Search forward/backward, repeat/reverse |

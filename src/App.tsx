@@ -24,7 +24,7 @@ function confirmationTitle(command: string): string {
 }
 const keyboardGroups = [
   ['Move', [['j / k · ↓ / ↑', 'Next / previous task'], ['gg / 0 · G', 'First / last task'], ['Ctrl F / Ctrl B · PgDn / PgUp', 'Page down / up'], ['H / M / L · C', 'Viewport top / middle / bottom · center row'], ['Enter / =', 'Show task details']]],
-  ['Task actions', [['a · m', 'Add · modify'], ['d · D', 'Done · delete (confirm)'], ['b', 'Start / stop (confirm)'], ['A · E', 'Annotate · denotate'], ['P / p / T / w', 'Priority / project / tags / wait'], ['u', 'Undo the most recent change']]],
+  ['Task actions', [['a · m', 'Add · modify'], ['d · D', 'Done · delete (confirm)'], ['b', 'Start / stop (confirm)'], ['A · E', 'Annotate · denotate'], ['P / p / T / w', 'Priority / project / tags / wait'], ['u', 'Undo the most recent change'], ['S', 'Taskwarrior sync']]],
   ['Find & commands', [[':', 'Taskwarrior command entry'], ['/ · ?', 'Search forward · backward'], ['n · N', 'Repeat search · reverse'], ['f · c', 'Filter · context command'], ['Tab / Shift Tab', 'Insert / cycle command hints'], ['Esc', 'Dismiss hints, then close entry']]],
   ['Browser additions', [['r · R', 'Choose report · next report'], ['v · V', 'Toggle mark · clear all marks'], ['+ / −', 'Tiebreak ±1 (when configured)'], ['q / Esc', 'Close details or overlay'], ['F1', 'This keyboard reference'], ['Refresh button', 'Re-read tasks (Ctrl L stays browser-owned)']]],
 ] as const;
@@ -54,6 +54,7 @@ export default function App() {
   const [mode, setMode] = useState<InputMode>('command');
   const [draft, setDraft] = useState('');
   const [commandIntent, setCommandIntent] = useState('');
+  const [commandTargets, setCommandTargets] = useState<string[]>([]);
   const [searchDraft, setSearchDraft] = useState('');
   const [lastSearch, setLastSearch] = useState({ value: '', direction: 1 });
   const [busy, setBusy] = useState(false);
@@ -149,10 +150,12 @@ export default function App() {
 
   function focusTable() { table.current?.focus(); }
   function openCommand(value?: string, nextMode: InputMode = 'command', intent = '') {
+    if (inputOpen) return;
     if (value !== undefined) { if (nextMode === 'command') setDraft(value); else setSearchDraft(value); }
+    setCommandTargets(nextMode === 'command' ? [...targets] : []);
     setCommandIntent(intent); setMode(nextMode); setInputOpen(true); setNotice('');
   }
-  function closeCommand() { setInputOpen(false); focusTable(); }
+  function closeCommand() { setInputOpen(false); setCommandTargets([]); focusTable(); }
   function move(delta: number, absolute = false) {
     const index = tasks.findIndex(task => task.uuid === selected);
     const next = Math.max(0, Math.min(tasks.length - 1, absolute ? delta : index + delta));
@@ -184,7 +187,7 @@ export default function App() {
         if (result.report !== undefined) setReport(result.report);
         if (result.filter !== undefined) { setFilter(result.filter); setFilterInput(result.filter); }
       }
-      if (fromInput && draftRef.current === command) { setDraft(''); setInputOpen(false); focusTable(); }
+      if (fromInput && draftRef.current === command) { setDraft(''); closeCommand(); }
       setConfirmation(null);
       void refreshRef.current(); void loadMeta();
     } catch (reason) { setError((reason as Error).message); setConfirmation(null); }
@@ -218,7 +221,7 @@ export default function App() {
     }
     const mutation = !['r', 'report', 'f', 'filter', 'context', 'c', ...(meta?.reports.map(report => report.name) ?? [])].includes(name);
     if (loading && mutation) { setError('Wait for the current task view before changing tasks.'); return; }
-    requestCommand(value, targets, true);
+    requestCommand(value, commandTargets, true);
   }
 
   const keyPrefix = useRef({ key: '', at: 0 });
@@ -242,7 +245,7 @@ export default function App() {
         Enter: () => { if (task) setDetail(true); }, '=': () => { if (task) setDetail(true); },
         ':': () => openCommand(), a: () => openCommand('a '), m: () => openCommand('m '), A: () => openCommand('A '), E: () => openCommand('denotate '),
         d: () => { if (task && !loading && !busy) requestCommand('d', targets); }, D: () => { if (task && !loading && !busy) requestCommand('D', targets); },
-        b: () => { if (task && !loading && !busy) requestCommand('toggle', targets); }, u: () => requestCommand('undo', []),
+        b: () => { if (task && !loading && !busy) requestCommand('toggle', targets); }, u: () => requestCommand('undo', []), S: () => { void execute('sync', []); },
         P: () => openCommand('m priority:'), p: () => openCommand('m project:'), T: () => openCommand('m ', 'command', 'Tags: +tag adds and -tag removes; other tags stay unchanged.'), w: () => openCommand('m wait:'),
         f: () => openCommand(`f ${filter}`), c: () => openCommand('context '), r: () => setReportPicker(true), R: () => setReport('next'),
         C: () => { if (selected) document.getElementById(`task-${selected}`)?.scrollIntoView({ block: 'center' }); },
@@ -250,7 +253,7 @@ export default function App() {
         '-': () => { if (task && !loading && meta?.attributes.includes('tiebreak')) void execute('tiebreak -1', targets); },
         '/': () => openCommand('', 'search'), '?': () => openCommand('', 'reverse'), n: () => find(lastSearch.value, lastSearch.direction), N: () => find(lastSearch.value, -lastSearch.direction),
         v: () => { if (task) toggleMark(task.uuid); }, V: () => setMarks(new Set()),
-        q: () => { setDetail(false); setInputOpen(false); }, Escape: () => { setDetail(false); setInputOpen(false); setNotice(''); }, F1: () => setHelp(true),
+        q: () => { setDetail(false); closeCommand(); }, Escape: () => { setDetail(false); closeCommand(); setNotice(''); }, F1: () => setHelp(true),
       };
       if (keys[event.key]) { event.preventDefault(); keys[event.key](); }
     }
@@ -303,9 +306,9 @@ export default function App() {
         return <div key={key}><dt>{key}</dt><dd>{link ? <a href={link} target="_blank" rel="noreferrer">{displayValue(value)}<ExternalLink size={11} /></a> : date && /^\d{8}T/.test(String(value)) ? date.toLocaleString() : displayValue(value)}</dd></div>;
       })}</dl><div className="annotation-heading"><h3>Annotations</h3><span>{task.annotations?.length ?? 0}</span></div>{task.annotations?.length ? <ol className="annotations">{task.annotations.map((annotation, index) => <li key={`${annotation.entry}-${index}`}><time>{parseDate(annotation.entry)?.toLocaleString() ?? annotation.entry}</time><p>{annotation.description}</p></li>)}</ol> : <p className="muted">No annotations. Press <kbd>A</kbd> to add one.</p>}<p className="detail-note"><kbd>j</kbd><kbd>k</kbd> navigate · <kbd>q</kbd> close</p></aside>}
     </main>
-    <CommandBar open={inputOpen} mode={mode} draft={mode === 'command' ? draft : searchDraft} onDraft={mode === 'command' ? setDraft : setSearchDraft} onClose={closeCommand} onSubmit={submit} meta={meta} tasks={tasks} busy={busy} targetCount={targets.length} intent={commandIntent} />
+    <CommandBar open={inputOpen} mode={mode} draft={mode === 'command' ? draft : searchDraft} onDraft={mode === 'command' ? setDraft : setSearchDraft} onClose={closeCommand} onSubmit={submit} meta={meta} tasks={tasks} busy={busy} targetUUIDs={commandTargets} intent={commandIntent} />
     <footer className="footer"><div className="keyboard-hints"><span><kbd>j</kbd><kbd>k</kbd> move</span><span><kbd>↵</kbd> details</span><span><kbd>m</kbd> modify</span><span><kbd>b</kbd> start / stop</span><span><kbd>/</kbd> find</span></div><button type="button" className="command-trigger" onClick={() => openCommand()}><Command size={13} /><span>{draft ? 'Resume command' : 'Command'}</span><kbd>:</kbd></button><span className="footer-count">{task ? `${tasks.findIndex(item => item.uuid === task.uuid) + 1} / ${tasks.length}` : `0 / ${tasks.length}`}</span></footer>
-    {help && <Modal title="Keyboard reference" onClose={() => setHelp(false)} className="help-modal"><p className="modal-intro">VIT 2.3 default navigation and task keys. Shortcuts work when the task list is focused; normal inputs keep their own keys.</p><div className="key-groups">{keyboardGroups.map(([name, bindings]) => <section key={name}><h3>{name}</h3><dl>{bindings.map(([keys, description]) => <div key={keys}><dt><kbd>{keys}</kbd></dt><dd>{description}</dd></div>)}</dl></section>)}</div><p className="modal-footnote">VIT’s external editor, terminal task prompt, sync and quit actions are not bound here. Ctrl L remains the browser address bar. Reports and columns come from your Taskwarrior configuration. :m / :add and other task commands are web extensions; VIT uses bare task-action keys. :ID selects a visible task; :help opens this reference.</p></Modal>}
+    {help && <Modal title="Keyboard reference" onClose={() => setHelp(false)} className="help-modal"><p className="modal-intro">VIT 2.3 default navigation and task keys. Shortcuts work when the task list is focused; normal inputs keep their own keys.</p><div className="key-groups">{keyboardGroups.map(([name, bindings]) => <section key={name}><h3>{name}</h3><dl>{bindings.map(([keys, description]) => <div key={keys}><dt><kbd>{keys}</kbd></dt><dd>{description}</dd></div>)}</dl></section>)}</div><p className="modal-footnote">VIT’s external editor, terminal task prompt and process-quit actions are not bound here. Ctrl L remains the browser address bar. Reports and columns come from your Taskwarrior configuration. :m / :add and other task commands are web extensions; VIT uses bare task-action keys. :ID selects a visible task; :help opens this reference.</p></Modal>}
     {reportPicker && <Modal title="Choose report" onClose={() => setReportPicker(false)}><div className="report-options">{meta?.reports.map(item => <button type="button" key={item.name} onClick={() => { setReport(item.name); setReportPicker(false); setMarks(new Set()); }}><span><strong>{item.name}</strong><small>{item.description}</small></span>{report === item.name && <Check size={15} />}</button>)}</div></Modal>}
     {confirmation && <Modal title={confirmationTitle(confirmation.command)} onClose={() => { if (!busy) setConfirmation(null); }}><p className="confirm-description">{`Apply this action to ${confirmation.uuids.length} selected task${confirmation.uuids.length === 1 ? '' : 's'}? Selection is captured by UUID.`}</p><code className="confirm-command">:{confirmation.command.replace(/^:/, '')}</code><div className="modal-actions"><button type="button" className="secondary" disabled={busy} onClick={() => setConfirmation(null)}>Cancel</button><button type="button" className="primary" disabled={busy} onClick={() => void execute(confirmation.command, confirmation.uuids, confirmation.fromInput)}>{busy ? 'Working…' : 'Confirm'}</button></div></Modal>}
   </div>;

@@ -73,6 +73,20 @@ describe('task workspace', () => {
     expect(screen.getByRole('combobox', { name: 'Task command' })).toHaveFocus();
     expect(JSON.parse(localStorage.getItem('taskwarrior.view')!)).toEqual({ report: 'next', theme: 'system' });
   });
+  it.each(['m', ':'])('keeps the %s prompt target after the task disappears and another row is clicked', async key => {
+    const user = userEvent.setup(); await ready();
+    fireEvent.keyDown(list(), { key });
+    const input = screen.getByRole('combobox', { name: 'Task command' });
+    await user.type(input, key === 'm' ? 'due:tomorrow' : 'm due:tomorrow');
+    currentTasks = [originalTasks[1]];
+    act(() => MockEventSource.instances.at(-1)!.emit('change'));
+    await waitFor(() => expect(selectedDescription()).toBe('Second fixture task'));
+    expect(screen.getByLabelText('Command entry')).toHaveTextContent('1 task targeted · uuid-one');
+    await user.click(screen.getByText('Second fixture task'));
+    await user.click(input); await user.keyboard('{Enter}');
+    await waitFor(() => expect(commands[0]).toMatchObject({ command: 'm due:tomorrow', uuids: ['uuid-one'] }));
+    expect(currentTasks[0]).toEqual(originalTasks[1]);
+  });
   it('keeps the nearest row when the focused UUID disappears during triage', async () => {
     currentTasks = [...originalTasks, { ...originalTasks[0], id: 3, uuid: 'uuid-three', description: 'Third fixture task' }];
     await ready(); fireEvent.keyDown(list(), { key: 'j' });
@@ -134,6 +148,11 @@ describe('task workspace', () => {
     await waitFor(() => expect(commands[0]).toMatchObject({ command: 'd', uuids: ['uuid-one'] }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     fireEvent.keyDown(list(), { key: 'u' }); await waitFor(() => expect(commands[1]?.command).toBe('undo'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+  it('dispatches default VIT S directly to sync without task UUIDs or confirmation', async () => {
+    await ready(); fireEvent.keyDown(list(), { key: 'S' });
+    await waitFor(() => expect(commands[0]).toMatchObject({ command: 'sync', uuids: [] }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
   it('retains browser shortcuts and never handles navigation letters in regular inputs', async () => {

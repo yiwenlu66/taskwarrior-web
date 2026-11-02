@@ -34,6 +34,7 @@ describe('contextual completion', () => {
   });
   it('completes reports, contexts, priorities, tags, UDAs and durations', () => {
     expect(values(':r ex')).toEqual(['external']);
+    expect(values(':sy')).toEqual([':sync']);
     expect(values(':ex')).toEqual([':external']);
     expect(values(':context o')).toEqual(['office']);
     expect(values(':m priority:')).toContain('priority:H');
