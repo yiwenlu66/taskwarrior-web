@@ -17,6 +17,13 @@ describe('command interaction', () => {
     await user.tab(); expect(input).toHaveValue('m due:tomorrow');
     await user.tab({ shift: true }); expect(input).toHaveValue('m due:today');
   });
+  it('hints weekday keywords for a partial date prefix', async () => {
+    const submit = vi.fn(), user = userEvent.setup(); render(<Harness initial="m due:we" submit={submit} />);
+    expect(screen.getByRole('listbox')).toHaveTextContent('wednesday');
+    await user.tab(); expect(screen.getByRole('combobox')).toHaveValue('m due:wednesday');
+    await user.tab(); expect(screen.getByRole('combobox')).toHaveValue('m due:wed');
+    await user.keyboard('{Enter}'); expect(submit).toHaveBeenCalledExactlyOnceWith('m due:wed');
+  });
   it('executes typed Enter immediately even with available hints', async () => {
     const submit = vi.fn(), user = userEvent.setup(); render(<Harness submit={submit} />);
     await user.keyboard('{Enter}'); expect(submit).toHaveBeenCalledWith('m due:');

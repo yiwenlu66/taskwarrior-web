@@ -22,6 +22,17 @@ describe('contextual completion', () => {
     expect(values(':m due:to')).toEqual(['due:today', 'due:tomorrow']);
     expect(values(':m due:')).not.toContain('due:"next monday"');
   });
+  it('searches the whole date vocabulary once a prefix is typed', () => {
+    expect(values(':m due:we')).toEqual(['due:wednesday', 'due:wed']);
+    expect(values(':m due:mon')).toEqual(['due:monday', 'due:mon']);
+    expect(values(':m due:jan')).toEqual(['due:january', 'due:jan']);
+    expect(values(':m due:eo')).toEqual(['due:eow', 'due:eom', 'due:eod', 'due:eoww', 'due:eoq', 'due:eoy']);
+    expect(values(':m due:sow')).toEqual(['due:sow', 'due:soww']);
+    expect(values(':m wait:mo')).toEqual(['wait:monday', 'wait:mon']);
+    expect(values(':m due:week')).toEqual([]);
+    // An empty prefix stays a short shortlist so the prompt is not flooded.
+    expect(values(':m due:').length).toBeLessThanOrEqual(11);
+  });
   it('replaces a token at the caret and preserves the rest of the command', () => {
     const text = ':m due:to project:work +home';
     const completion = complete(text, 9, meta, tasks);

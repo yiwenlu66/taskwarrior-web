@@ -244,6 +244,24 @@ class ServerTests(unittest.TestCase):
         self.assertNotIn(finished["uuid"], result["dependencyIds"])
         self.assertEqual(self.tasks("external", "description:none")["dependencyIds"], {})
 
+    def test_date_completion_vocabulary_is_accepted_by_the_cli(self):
+        """Every keyword the prompt offers must really parse in the installed Taskwarrior."""
+        keywords = json.loads((Path(__file__).resolve().parent.parent / "src" / "dateKeywords.json").read_text())
+        self.assertTrue(keywords)
+        self.assertEqual(len({value for value, _ in keywords}), len(keywords), "duplicate keyword")
+        for value, description in keywords:
+            self.assertTrue(description.strip(), value)
+            result = subprocess.run(["task", "rc.color=off", "rc._forcecolor=off", "calc", value],
+                                    env=self.env, text=True, capture_output=True,
+                                    stdin=subprocess.DEVNULL, timeout=10)
+            self.assertEqual(result.returncode, 0, f"{value}: {result.stderr or result.stdout}")
+            self.assertRegex(result.stdout.strip(), r"^(\d{4}-\d{2}-\d{2}T|P)", value)
+        # The reported gap: the offered weekday forms are real `due:` values, not only
+        # calculator expressions.
+        for word in ("wed", "wednesday", "eow"):
+            created = self.add(f"due keyword {word}", due=word)
+            self.assertRegex(str(created.get("due")), r"^\d{8}T", word)
+
     def test_uuid_selected_mutation_with_numbers_and_other_selectors(self):
         first = self.add("first")
         chosen = self.add("chosen")

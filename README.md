@@ -112,7 +112,7 @@ Choose a configured report, select a task, and use the command prompt to act on 
 :context none
 ```
 
-`modify`, `annotate`, `done`, `delete` and start/stop target the selection by UUID, so changing numeric Taskwarrior IDs does not redirect the action. Done, delete and start/stop ask for confirmation; undo runs directly, following VIT's `u` action. Taskwarrior interprets date expressions; Tab completion suggests commands, attributes, dates, reports, projects and tags rather than replacing its parser.
+`modify`, `annotate`, `done`, `delete` and start/stop target the selection by UUID, so changing numeric Taskwarrior IDs does not redirect the action. Done, delete and start/stop ask for confirmation; undo runs directly, following VIT's `u` action. Taskwarrior interprets date expressions; Tab completion suggests commands, attributes, dates, reports, projects and tags rather than replacing its parser. Date values (`due:`, `wait:`, `scheduled:`, `until:`) complete from Taskwarrior's own vocabulary: weekday and month names with their three-letter forms, boundary keywords such as `sow`, `eow`, `eom`, `soq`, `soy`, relative durations like `1w`, plus today's ISO date and a clear entry. An empty prefix shows a short shortlist; the first character searches the whole vocabulary, so `due:we` offers `wednesday` and `wed`.
 
 Columns come from your Taskwarrior reports, and columns that are empty across the whole view are hidden. A `depends` column lists the IDs of the blockers that still exist as open tasks, in any project, ascending — the same IDs the native report shows; blockers that are already completed have no ID and are omitted rather than shown as UUID fragments. Rows for started (in progress) tasks carry a slightly cooler background tint.
 

@@ -1,4 +1,5 @@
 import type { Meta, Task } from './types';
+import dateKeywords from './dateKeywords.json';
 
 export interface Token { raw: string; value: string; start: number; end: number }
 export interface Suggestion { value: string; label: string; description: string; kind: string }
@@ -33,6 +34,8 @@ const commands: [string, string][] = [
   ['filter', 'Set an additional Taskwarrior filter'], ['context', 'Switch active context'],
 ];
 const dateFields = new Set(['due', 'wait', 'scheduled', 'until', 'entry', 'end', 'start']);
+/** Keywords offered before the user types anything; the rest appear on the first character. */
+const shortlist = 9;
 const attributes = ['description', 'project', 'priority', 'due', 'wait', 'scheduled', 'until', 'recur', 'tags', 'depends', 'status'];
 const quoteValue = (value: string) => /\s|["'\\]/.test(value) ? `"${value.replace(/(["\\])/g, '\\$1')}"` : value;
 const suggestion = (value: string, description: string, kind: string, label = value): Suggestion => ({ value, label, description, kind });
@@ -67,11 +70,13 @@ export function complete(text: string, caret: number, meta: Meta | null, tasks: 
     if (dateFields.has(attribute)) {
       const date = new Date();
       const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      // Taskwarrior's date grammar covers weekday and month names plus boundary
+      // keywords; the whole vocabulary is searched as soon as a prefix is typed,
+      // while an empty prefix keeps the prompt short.
+      const keywords = (prefix ? dateKeywords : dateKeywords.slice(0, shortlist))
+        .map(([value, description]) => suggestion(value, description, 'date'));
       values = [
-        suggestion('today', 'Today at midnight', 'date'), suggestion('tomorrow', 'Tomorrow at midnight', 'date'),
-        suggestion('now+3d', 'Three days from now · Taskwarrior expression', 'date'),
-        suggestion('monday', 'Next Monday · use monday, not “next monday”', 'date'),
-        suggestion('eow', 'End of this week', 'date'), suggestion('eom', 'End of this month', 'date'),
+        ...keywords,
         suggestion(iso, 'ISO date · YYYY-MM-DD', 'date'), suggestion('', 'Clear this date', 'date', '(clear)'),
       ];
     } else if (attribute === 'priority') {
