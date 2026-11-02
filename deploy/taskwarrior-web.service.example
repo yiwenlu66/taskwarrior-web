@@ -1,0 +1,24 @@
+# Prefer scripts/install-service.sh: it resolves paths and validates the local
+# Tailscale address. For manual installation, copy this file to
+# ~/.config/systemd/user/taskwarrior-web.service and edit the paths and address.
+# Replace REPLACE_WITH_TAILSCALE_IPV4 with the output of `tailscale ip -4`.
+# Never use 0.0.0.0, ::, a LAN address, or a public address: there is no login.
+[Unit]
+Description=Taskwarrior Web (Tailscale only)
+
+[Service]
+Type=simple
+WorkingDirectory=%h/taskwarrior-web
+Environment=TASKWEB_HOST=REPLACE_WITH_TAILSCALE_IPV4
+Environment=TASKWEB_PORT=7834
+# Adjust PATH if task is installed outside these directories.
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+# Optional: uncomment and edit to use a non-default Taskwarrior instance.
+# Environment=TASKRC=%h/.taskrc
+# Environment=TASKDATA=%h/.task
+ExecStart=/usr/bin/python3 server.py --host ${TASKWEB_HOST} --port ${TASKWEB_PORT} --static-dir dist
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
