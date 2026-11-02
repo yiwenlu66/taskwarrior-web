@@ -95,7 +95,7 @@ Choose a configured report, select a task, and use the command prompt to act on 
 :context none
 ```
 
-`modify`, `annotate`, `done`, `delete` and start/stop target the selection by UUID, so changing numeric Taskwarrior IDs does not redirect the action. Delete and undo ask for confirmation. Taskwarrior interprets date expressions; Tab completion suggests commands, attributes, dates, reports, projects and tags rather than replacing its parser.
+`modify`, `annotate`, `done`, `delete` and start/stop target the selection by UUID, so changing numeric Taskwarrior IDs does not redirect the action. Done, delete and start/stop ask for confirmation; undo runs directly, following VIT's `u` action. Taskwarrior interprets date expressions; Tab completion suggests commands, attributes, dates, reports, projects and tags rather than replacing its parser.
 
 ### Keyboard reference
 
@@ -109,7 +109,8 @@ Shortcuts apply when the task list is focused; text fields retain normal typing.
 | `H` / `M` / `L` | Top / middle / bottom of viewport |
 | `Enter` / `=` | Task details |
 | `a`, `m`, `A`, `E` | Add, modify, annotate, denotate |
-| `d`, `D`, `b`, `u` | Done, delete, start/stop, undo |
+| `d`, `D`, `b` | Done, delete, start/stop (confirm) |
+| `u` | Undo the most recent change directly |
 | `P`, `p`, `T`, `w` | Priority, project, tags, wait |
 | `:`, `f`, `c` | Command prompt, filter, context |
 | `/` / `?`, `n` / `N` | Search forward/backward, repeat/reverse |
@@ -123,7 +124,7 @@ Use the **Refresh** button for an explicit refresh; `Ctrl+L` remains the browser
 
 ### VIT compatibility
 
-This is an independent web interface, not VIT running in a browser. It follows VIT's task-centric command flow, while browser focus and reserved shortcuts impose differences. The supported command set is intentionally bounded: arbitrary shell execution, Taskwarrior configuration edits and imports are not exposed. Bare `m` opens Modify as in VIT; accepting `:m due:tomorrow` is a web convenience, not native VIT ex-command behavior. VIT's external editor (`e`), terminal task prompt (`t`), sync (`S`) and quit actions are not bound; use the CLI for those operations. Personal VIT keybindings, plugins and terminal rendering are not loaded. Taskwarrior report/filter/context configuration remains authoritative; a browser table cannot reproduce every terminal-only formatting feature.
+This is an independent web interface, not VIT running in a browser. It follows VIT's task-centric command flow, while browser focus and reserved shortcuts impose differences. The supported command set is intentionally bounded: arbitrary shell execution, Taskwarrior configuration edits and imports are not exposed. Bare `m` opens Modify as in VIT; accepting `:m due:tomorrow` is a web convenience, not native VIT ex-command behavior. VIT's external terminal editor, shell prompts and process-quit actions cannot be reproduced directly in the browser. Consult the in-app F1 help for the implemented keybindings. Personal VIT keybindings, plugins and terminal rendering are not loaded. Taskwarrior report/filter/context configuration remains authoritative; a browser table cannot reproduce every terminal-only formatting feature.
 
 ## Development and tests
 
