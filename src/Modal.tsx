@@ -6,7 +6,11 @@ export function Modal({ title, onClose, children, className = '' }: { title: str
   const close = useRef(onClose); close.current = onClose;
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
-    dialog.current?.querySelector<HTMLElement>('button, input, select, [tabindex="0"]')?.focus();
+    // The caller's primary action wins over the heading's close button, so Enter
+    // answers the dialog instead of dismissing it.
+    const target = dialog.current?.querySelector<HTMLElement>('[data-autofocus]')
+      ?? dialog.current?.querySelector<HTMLElement>('button, input, select, [tabindex="0"]');
+    target?.focus();
     return () => previous?.focus();
   }, []);
   return <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>

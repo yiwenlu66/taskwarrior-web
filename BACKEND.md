@@ -13,7 +13,7 @@ python3 -m unittest discover -s tests -v
 
 Use the machine's Tailscale IPv4 address with `--host` for tailnet access. The loopback default prevents accidental network exposure. This service deliberately has no login: anyone who can reach it can read and change tasks. Keep it on the intended tailnet, not the public Internet. The HTTP server does not terminate TLS or trust forwarded proxy headers.
 
-See [API.md](API.md) for the browser contract. Production assets must be built into `dist/` first. Missing assets return a clear error; extensionless paths fall back to the SPA entry point. Resolved paths, including symlinks, must stay inside the configured static directory.
+See [API.md](API.md) for the browser contract. Production assets must be built into `dist/` first; static files under `public/` (the declared favicons) are copied there by the frontend build and served with their real media type. Missing assets return a clear error; extensionless paths fall back to the SPA entry point. Resolved paths, including symlinks, must stay inside the configured static directory.
 
 ## Report fidelity
 

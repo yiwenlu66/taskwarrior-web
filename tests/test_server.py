@@ -142,6 +142,25 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(self.request("GET", "/api/missing")[0], 404)
         self.assertEqual(self.request("OPTIONS", "/api/command")[0], 405)
 
+    def test_declared_favicon_is_shipped_and_served_with_its_media_type(self):
+        root = Path(__file__).resolve().parent.parent
+        icons = re.findall(r'<link rel="icon" href="/([^"]+)"', (root / "index.html").read_text())
+        self.assertEqual(icons, ["favicon.svg", "favicon.ico"])
+        for name in icons:
+            shipped = root / "public" / name
+            self.assertTrue(shipped.is_file(), name)
+            shutil.copy(shipped, self.static / name)
+        # A favicon served as text/plain or application/octet-stream is ignored by
+        # browsers, so the media types are the part worth asserting.
+        status, body, headers = self.request("GET", "/favicon.svg")
+        self.assertEqual(status, 200)
+        self.assertTrue(headers["Content-Type"].startswith("image/svg+xml"), headers["Content-Type"])
+        self.assertIn(b"<svg", body)
+        status, body, headers = self.request("GET", "/favicon.ico")
+        self.assertEqual(status, 200)
+        self.assertIn(headers["Content-Type"], {"image/vnd.microsoft.icon", "image/x-icon"})
+        self.assertEqual(body[:4], b"\x00\x00\x01\x00")
+
     def test_add_modify_done_start_stop_annotate_delete_undo(self):
         task = self.add('read "quoted" words and 2 things', project="alpha", priority="H", due="tomorrow")
         u = task["uuid"]

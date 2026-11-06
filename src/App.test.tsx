@@ -139,6 +139,13 @@ describe('task workspace', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Invalid date fixture'); expect(input).toHaveValue('m due:invalid');
     await user.type(input, 'x'); expect(input).toHaveValue('m due:invalidx');
   });
+  it('focuses the confirmation action instead of the dialog close button', async () => {
+    const user = userEvent.setup(); await ready(); fireEvent.keyDown(list(), { key: 'd' });
+    const dialog = screen.getByRole('dialog', { name: 'Complete selected tasks?' });
+    expect(within(dialog).getByRole('button', { name: 'Confirm' })).toHaveFocus();
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(commands[0]).toMatchObject({ command: 'd', uuids: ['uuid-one'] }));
+  });
   it('confirms done with captured UUID, while undo remains direct', async () => {
     const user = userEvent.setup(); await ready(); fireEvent.keyDown(list(), { key: 'd' });
     expect(commands).toHaveLength(0);
